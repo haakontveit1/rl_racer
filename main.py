@@ -13,6 +13,8 @@ def main():
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("RL Race Track")
     
+    history_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+
     font = pygame.font.SysFont("Arial", 24, bold=True)
 
     # 3. The Clock (controls the speed of the game)
@@ -43,9 +45,18 @@ def main():
         # Update the car and pass in the on_track status
         car.update(keys,on_track)
 
+        # Paint the path onto the history surface forever
+
+
         if car.get_rect().colliderect(track.finish_line):
-            print("Finish Line Reached!")
-            
+            if len(car.trajectory) > 1:
+                pygame.draw.lines(history_surface, (0, 255, 255, 50), False, car.trajectory, 1)
+
+            # CLEAR the memory immediately so no "jump line" can form
+            car.trajectory = []
+
+            print(f"Finish Line Reached at {elapsed_time}!")
+            start_time = pygame.time.get_ticks()
             # 2. Reset the car to the starting position
             # In RL, this is the end of the 'Episode'
             car.position = pygame.math.Vector2(200, 130)
@@ -57,6 +68,8 @@ def main():
 
         # 3. Draw: Put the track on top of the grass
         track.draw(screen)
+
+        screen.blit(history_surface, (0, 0))
 
         # 3. Draw: Put the track on top of the grass
         car.draw(screen)

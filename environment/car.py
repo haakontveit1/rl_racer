@@ -18,6 +18,8 @@ class Car:
         self.friction = CAR_FRICTION
         self.grip = CAR_GRIP
 
+        self.trajectory = []
+
     def update(self, keys, on_track):
         if on_track:
             current_friction = self.friction
@@ -50,24 +52,23 @@ class Car:
         self.velocity = (forward_dir * forward_velocity) + (right_dir * lateral_velocity)
         self.position += self.velocity
 
+        self.trajectory.append(Vector2(self.position))
+
 
     def draw(self, surface):
-        # 1. Create a temporary 'Surface' (a blank canvas) just for the car
-        # We use 'SRCALPHA' so the background of the car is transparent
-        car_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        # 1. Draw the current active trail (the breadcrumbs for THIS lap)
+        if len(self.trajectory) > 1:
+            pygame.draw.lines(surface, (0, 255, 255), False, self.trajectory, 2)
         
-        # 2. Draw a red rectangle onto that tiny car canvas
+        # 2. Create the car's physical body
+        car_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         pygame.draw.rect(car_surface, RED, (0, 0, self.width, self.height))
         
-        # 3. Rotate the car canvas based on our current angle
-        # Note: we use negative self.angle because Pygame's rotation is counter-intuitive
+        # 3. Handle rotation and centering
         rotated_car = pygame.transform.rotate(car_surface, -self.angle)
-        
-        # 4. Get a new 'Rect' for the rotated image so it stays centered
-        # Without this, the car would 'wobble' around its top-left corner when turning
         rect = rotated_car.get_rect(center=(self.position.x, self.position.y))
         
-        # 5. Finally, 'blit' (paste) the rotated car onto the main screen
+        # 4. Paste the car onto the screen
         surface.blit(rotated_car, rect)
 
     def get_rect(self):
