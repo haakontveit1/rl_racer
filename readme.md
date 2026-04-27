@@ -1,0 +1,1 @@
+Jeg lærer RL og samtidig kjører racerbil
