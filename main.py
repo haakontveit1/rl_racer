@@ -1,5 +1,6 @@
 import pygame
 import sys
+import os
 
 from config import *
 from environment.track import Track
@@ -27,13 +28,29 @@ def main():
     
     start_time = pygame.time.get_ticks()
 
+
+    screenshot_count = 0
     running = True
     while running:
         # A. Event Handling (Check for clicks/quitting)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+
+            # This triggers exactly ONCE when the key is first pressed
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_s:
+                    # Build the path: "screenshots/lap_0.png"
+                    filename = os.path.join("screenshots", f"lap_{screenshot_count}.png")
+                    
+                    # Save the screen to that specific path
+                    pygame.image.save(screen, filename)
+                    
+                    print(f"Saved screenshot to {filename}")
+                    screenshot_count += 1
         
+
+
         # 1. Capture the Keys (The Brain)
         keys = pygame.key.get_pressed()
         
