@@ -5,6 +5,7 @@ import os
 from config import *
 from environment.track import Track
 from environment.car import Car
+from environment.action import Action
 
 def main():
     # 1. Start the Pygame engines
@@ -59,8 +60,10 @@ def main():
         
         elapsed_time = (pygame.time.get_ticks() - start_time) / 1000
 
-        # Update the car and pass in the on_track status
-        car.update(keys,on_track)
+        # Translate keyboard state into a generic action, then drive the car.
+        # An RL policy will skip the keyboard and construct Action(...) directly.
+        action = Action.from_keys(keys)
+        car.update(action, on_track)
 
         # Paint the path onto the history surface forever
 

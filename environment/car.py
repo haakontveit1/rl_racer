@@ -20,24 +20,21 @@ class Car:
 
         self.trajectory = []
 
-    def update(self, keys, on_track):
+    def update(self, action, on_track):
         if on_track:
             current_friction = self.friction
             current_accel = self.acceleration_power
         else:
             current_friction = GRASS_FRICTION
             current_accel = self.acceleration_power * GRASS_ACCEL_LIMIT
-        
+
         # 1. Handle Turning
-        if keys[pygame.K_LEFT]:
-            self.angle -= self.rotation_speed
-        if keys[pygame.K_RIGHT]:
-            self.angle += self.rotation_speed
+        self.angle += action.steer * self.rotation_speed
 
         # 2. Handle Acceleration
-        if keys[pygame.K_UP]:
+        if action.throttle > 0:
             forward = Vector2(1, 0).rotate(self.angle)
-            self.velocity += forward * current_accel
+            self.velocity += forward * current_accel * action.throttle
 
         # 3. Apply Physics
         self.velocity *= current_friction  # Slowly slows down
