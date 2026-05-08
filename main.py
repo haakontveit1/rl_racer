@@ -3,18 +3,17 @@ import sys
 import os
 
 from config import *
-from environment.track import Track
-from environment.car import Car
 from environment.action import Action
+from environment.env import RacerEnv
 
 def main():
     # 1. Start the Pygame engines
     pygame.init()
-    
+
     # 2. Create the window (the "Canvas")
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("RL Race Track")
-    
+
     history_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
 
     font = pygame.font.SysFont("Arial", 24, bold=True)
@@ -22,11 +21,12 @@ def main():
     # 3. The Clock (controls the speed of the game)
     clock = pygame.time.Clock()
 
-    # 4. Instantiate: Create one 'instance' of our Track
-    track = Track()
+    # 4. Build the simulation environment. A human controller will feed it
+    #    Actions from the keyboard; an RL policy would feed it Actions
+    #    from a forward pass on env.reset()'s observation.
+    env = RacerEnv()
+    env.reset()
 
-    car = Car(200,130)
-    
     start_time = pygame.time.get_ticks()
 
 
@@ -54,45 +54,34 @@ def main():
 
         # 1. Capture the Keys (The Brain)
         keys = pygame.key.get_pressed()
-        
-        # 2. Update the Car (The Muscle)
-        on_track = track.is_on_track(car.position)
-        
+
         elapsed_time = (pygame.time.get_ticks() - start_time) / 1000
 
-        # Translate keyboard state into a generic action, then drive the car.
-        # An RL policy will skip the keyboard and construct Action(...) directly.
+        # Translate keyboard state into a generic action, then step the env.
+        # An RL policy will skip the keyboard and construct Action(...) directly,
+        # then call env.step(action) the same way we do here.
         action = Action.from_keys(keys)
-        car.update(action, on_track)
+        obs, reward, done, info = env.step(action)
 
-        # Paint the path onto the history surface forever
+        if info["crossed_finish"]:
+            # Bake the completed lap's trail into the persistent history layer
+            if len(env.car.trajectory) > 1:
+                pygame.draw.lines(history_surface, (0, 255, 255, 50), False, env.car.trajectory, 1)
+            print(f"Finish Line Reached at {elapsed_time:.2f}s!")
 
-
-        if car.get_rect().colliderect(track.finish_line):
-            if len(car.trajectory) > 1:
-                pygame.draw.lines(history_surface, (0, 255, 255, 50), False, car.trajectory, 1)
-
-            # CLEAR the memory immediately so no "jump line" can form
-            car.trajectory = []
-
-            print(f"Finish Line Reached at {elapsed_time}!")
+        if done:
+            # Episode boundary — finish line OR time cap. reset() restores the
+            # car *and* clears the trajectory so no jump line can form.
+            env.reset()
             start_time = pygame.time.get_ticks()
-            # 2. Reset the car to the starting position
-            # In RL, this is the end of the 'Episode'
-            car.position = pygame.math.Vector2(200, 130)
-            car.velocity = pygame.math.Vector2(0, 0)
-            car.angle = 90
 
         # B. Fill the background (Wipe the canvas clean)
         screen.fill(GREEN) # Our grass/mud
 
-        # 3. Draw: Put the track on top of the grass
-        track.draw(screen)
-
+        # Layer order: grass -> track -> historical trails -> car on top
+        env.track.draw(screen)
         screen.blit(history_surface, (0, 0))
-
-        # 3. Draw: Put the track on top of the grass
-        car.draw(screen)
+        env.car.draw(screen)
 
         timer_text = font.render(f"Time: {elapsed_time:.2f}s", True, (255, 255, 255))
         screen.blit(timer_text, (10, 10))
