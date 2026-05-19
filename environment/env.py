@@ -18,7 +18,7 @@ class RacerEnv:
             obs, reward, done, info = env.step(action)
     """
 
-    MAX_STEPS = FPS * 60   # 60-second episode time cap
+    MAX_STEPS = FPS * 10   # 10-second episode time cap (was 60s — too long; catastrophic timeouts dominated training variance)
 
     # Raycast layout — angles are relative to the car's heading (0 = straight ahead).
     RAY_ANGLES = (-90, -45, 0, 45, 90)
@@ -30,7 +30,7 @@ class RacerEnv:
     # No explicit off-track penalty — grass physics (terminal speed ~1.3 vs 10
     # on track) already punishes off-track heavily and consistently.
     OFF_TRACK_PENALTY = 0.0
-    TIME_PENALTY = 1.0        # per step always — strictly: faster lap = higher reward.
+    TIME_PENALTY = 3.0        # per step always — strictly: faster lap = higher reward.
     FINISH_BONUS = 100.0      # once on crossing the finish line
 
     def __init__(self):

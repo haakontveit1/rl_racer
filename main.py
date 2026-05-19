@@ -2,6 +2,8 @@ import pygame
 import sys
 import os
 
+import numpy as np
+
 from config import *
 from environment.action import Action
 from environment.env import RacerEnv
@@ -25,7 +27,12 @@ def main():
     #    Actions from the keyboard; an RL policy would feed it Actions
     #    from a forward pass on env.reset()'s observation.
     env = RacerEnv()
-    env.reset()
+    obs = np.array(env.reset(), dtype=np.float32)
+
+    os.makedirs("demos", exist_ok=True)
+    recording = False
+    recording_buffer = []
+    demo_count = 0
 
     start_time = pygame.time.get_ticks()
 
@@ -45,12 +52,18 @@ def main():
                 if event.key == pygame.K_s:
                     # Build the path: "screenshots/lap_0.png"
                     filename = os.path.join("screenshots", f"lap_{screenshot_count}.png")
-                    
+
                     # Save the screen to that specific path
                     pygame.image.save(screen, filename)
-                    
+
                     print(f"Saved screenshot to {filename}")
                     screenshot_count += 1
+
+                if event.key == pygame.K_r:
+                    recording = not recording
+                    if not recording:
+                        recording_buffer = []
+                    print(f"Recording: {'ON' if recording else 'OFF'}")
         
 
 
@@ -63,7 +76,13 @@ def main():
         # An RL policy will skip the keyboard and construct Action(...) directly,
         # then call env.step(action) the same way we do here.
         action = Action.from_keys(keys)
-        obs, reward, done, info = env.step(action)
+        if recording:
+            recording_buffer.append((
+                obs.copy(),
+                np.array([action.steer, action.throttle], dtype=np.float32),
+            ))
+        obs_tuple, reward, done, info = env.step(action)
+        obs = np.array(obs_tuple, dtype=np.float32)
         last_step_reward = reward
         episode_reward += reward
 
@@ -72,11 +91,22 @@ def main():
             if len(env.car.trajectory) > 1:
                 pygame.draw.lines(history_surface, (0, 255, 255, 50), False, env.car.trajectory, 1)
             print(f"Finish Line Reached at {elapsed_time:.2f}s! Episode reward: {episode_reward:.1f}")
+            if recording and recording_buffer:
+                demo_count += 1
+                obs_arr = np.stack([p[0] for p in recording_buffer])
+                act_arr = np.stack([p[1] for p in recording_buffer])
+                fname = f"demos/lap_{demo_count:03d}_{elapsed_time:.2f}s.npz"
+                np.savez(fname, obs=obs_arr, actions=act_arr)
+                print(f"Saved demo: {fname}  ({len(recording_buffer)} frames)")
+                recording_buffer = []
 
         if done:
             # Episode boundary — finish line OR time cap. reset() restores the
             # car *and* clears the trajectory so no jump line can form.
-            env.reset()
+            if recording and recording_buffer:
+                print(f"Discarded {len(recording_buffer)} frames (didn't finish)")
+            recording_buffer = []
+            obs = np.array(env.reset(), dtype=np.float32)
             start_time = pygame.time.get_ticks()
             episode_reward = 0.0
             last_step_reward = 0.0
@@ -101,6 +131,13 @@ def main():
         screen.blit(timer_text, (10, 10))
         screen.blit(ep_reward_text, (10, 40))
         screen.blit(step_reward_text, (10, 70))
+
+        if recording:
+            rec_text = font.render(f"● REC  (saved: {demo_count})", True, (255, 50, 50))
+            screen.blit(rec_text, (10, 100))
+        elif demo_count > 0:
+            rec_text = font.render(f"Recording off  (saved: {demo_count})", True, (180, 180, 180))
+            screen.blit(rec_text, (10, 100))
 
         # C. Update the display (Draw the new frame)
         pygame.display.flip()

@@ -23,6 +23,7 @@ from gym_env import GymRacer
 MODELS_DIR = "models"
 BEST_MODEL_DIR = "models/best"
 CHECKPOINTS_DIR = "models/checkpoints"
+PRETRAINED_PATH = "models/pretrained.zip"
 LOG_DIR = "logs"
 TOTAL_TIMESTEPS = 1_000_000
 EVAL_FREQ = 10_000
@@ -69,8 +70,20 @@ def main():
         "MlpPolicy",
         env,
         learning_rate=linear_schedule(LR_INITIAL, LR_FINAL),
+        # Default ent_coef=0.0 lets the action std collapse — exploration dies and
+        # the policy gets stuck. A small positive bonus keeps the distribution wide.
+        ent_coef=0.01,
+        seed=42,
         verbose=1,
     )
+
+    # If a behavior-cloning pretrain exists, load its weights into our fresh PPO.
+    # set_parameters loads weights only — our hyperparameters (LR schedule, ent_coef,
+    # etc.) stay intact, unlike PPO.load which would also overwrite them.
+    if os.path.exists(PRETRAINED_PATH):
+        model.set_parameters(PRETRAINED_PATH)
+        print(f"Loaded pretrained weights from {PRETRAINED_PATH}")
+
     # CSV logger writes every metric to disk so we can summarize the run at the end.
     model.set_logger(configure(LOG_DIR, ["stdout", "csv"]))
 
