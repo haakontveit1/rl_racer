@@ -7,6 +7,7 @@ class Car:
         self.position = Vector2(x, y)
         self.velocity = Vector2(0, 0)
         self.angle = 90
+        self.angular_velocity = 0.0
         
         # Appearance settings
         self.width = 40
@@ -28,8 +29,13 @@ class Car:
             current_friction = GRASS_FRICTION
             current_accel = self.acceleration_power * GRASS_ACCEL_LIMIT
 
-        # 1. Handle Turning
-        self.angle += action.steer * self.rotation_speed
+        # 1. Handle Turning — first-order lag (rotational inertia).
+        # Steer commands a target angular velocity; the actual angular velocity
+        # eases toward it. Set ANGULAR_RESPONSIVENESS=1.0 to recover the old
+        # instant-rotation behavior.
+        target_omega = action.steer * self.rotation_speed
+        self.angular_velocity += (target_omega - self.angular_velocity) * ANGULAR_RESPONSIVENESS
+        self.angle += self.angular_velocity
 
         # 2. Handle Acceleration
         if action.throttle > 0:

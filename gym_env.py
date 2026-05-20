@@ -21,13 +21,26 @@ from environment.action import Action
 class GymRacer(gym.Env):
     metadata = {"render_modes": []}
 
-    def __init__(self):
+    def __init__(self, waypoints=None, randomize_start=False):
         super().__init__()
-        self.env = RacerEnv()
+        self.env = RacerEnv(waypoints=waypoints, randomize_start=randomize_start)
 
-        # 5 rays in [0, 1], then forward + lateral speed roughly in [-2, 2].
-        obs_low = np.array([0.0] * 5 + [-2.0, -2.0], dtype=np.float32)
-        obs_high = np.array([1.0] * 5 + [2.0, 2.0], dtype=np.float32)
+        # Obs layout (11 dims):
+        #   [0..4]  5 rays in [0, 1]
+        #   [5]     forward speed   in [-2, 2]
+        #   [6]     lateral speed   in [-2, 2]
+        #   [7]     last_steer      in [-1, 1]
+        #   [8]     last_throttle   in [0, 1]
+        #   [9]     angular_velocity (normalized) in [-2, 2]
+        #   [10]    signed lateral offset from centerline (normalized) in [-3, 3]
+        obs_low = np.array(
+            [0.0] * 5 + [-2.0, -2.0, -1.0, 0.0, -2.0, -3.0],
+            dtype=np.float32,
+        )
+        obs_high = np.array(
+            [1.0] * 5 + [2.0, 2.0, 1.0, 1.0, 2.0, 3.0],
+            dtype=np.float32,
+        )
         self.observation_space = gym.spaces.Box(low=obs_low, high=obs_high, dtype=np.float32)
 
         # [steer, throttle]

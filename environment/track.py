@@ -6,7 +6,15 @@ from config import *
 # Default track: an L-shape. Make a new track by passing a different waypoint
 # list to Track(...). The centerline, asphalt, start/finish lines, and car
 # spawn position all derive from these waypoints.
-DEFAULT_WAYPOINTS = [(200, 150), (200, 600), (755, 600)]
+# Named tracks. Pass `--track <name>` to play_model.py or main.py to select one.
+# Add new tracks here by appending to the dict. The training script always uses
+# DEFAULT_TRACK; change DEFAULT_TRACK below if you want to train on a different one.
+TRACKS = {
+    "simple_track": [(200, 150), (200, 600), (755, 600)],
+    "chicane": [(150, 200), (150, 600), (500, 600), (500, 250), (850, 250), (850, 650)],
+}
+DEFAULT_TRACK = "chicane"
+DEFAULT_WAYPOINTS = TRACKS[DEFAULT_TRACK]
 DEFAULT_WIDTH = 200
 START_OFFSET = 30  # how far behind the first waypoint the car spawns
 
@@ -83,6 +91,28 @@ class Track:
                 best_distance_sq = dist_sq
                 best_progress = self._cumulative_length[i] + t * ab.length()
         return best_progress
+
+    def signed_lateral_offset(self, point):
+        # Perpendicular distance from centerline, signed by which side of the
+        # segment direction the point lies on (via the 2D cross product).
+        best_distance_sq = float("inf")
+        best_offset = 0.0
+        for i in range(len(self.waypoints) - 1):
+            a = self.waypoints[i]
+            b = self.waypoints[i + 1]
+            ab = b - a
+            ab_len_sq = ab.length_squared()
+            if ab_len_sq == 0:
+                continue
+            t = max(0.0, min(1.0, (point - a).dot(ab) / ab_len_sq))
+            projected = a + ab * t
+            diff = point - projected
+            dist_sq = diff.length_squared()
+            if dist_sq < best_distance_sq:
+                best_distance_sq = dist_sq
+                cross = ab.x * diff.y - ab.y * diff.x
+                best_offset = cross / ab.length()
+        return best_offset
 
     def cast_ray(self, origin, direction, max_distance, step=4):
         distance = 0

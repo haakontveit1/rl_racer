@@ -18,10 +18,11 @@ import pygame
 from stable_baselines3 import PPO
 
 from config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS, GREEN
+from environment.track import TRACKS, DEFAULT_TRACK
 from gym_env import GymRacer
 
 
-DEFAULT_MODEL = "models/best/best_model.zip"
+DEFAULT_MODEL = "models/chicane/best/best_model.zip"
 
 
 def main():
@@ -37,6 +38,13 @@ def main():
         action="store_true",
         help="Sample from the policy instead of taking the mean action.",
     )
+    parser.add_argument(
+        "--track",
+        default=DEFAULT_TRACK,
+        choices=list(TRACKS.keys()),
+        help=f"Track to drive on (default: {DEFAULT_TRACK}). "
+             f"Old simple-track models live in models/simple_track/.",
+    )
     args = parser.parse_args()
 
     if not os.path.exists(args.model_path):
@@ -44,13 +52,15 @@ def main():
         sys.exit(1)
 
     model = PPO.load(args.model_path)
-    gym_env = GymRacer()
+    gym_env = GymRacer(waypoints=TRACKS[args.track])
     # Underlying RacerEnv — the gym wrapper doesn't expose track/car for rendering.
     env = gym_env.env
 
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-    pygame.display.set_caption(f"RL Racer — {os.path.basename(args.model_path)}")
+    pygame.display.set_caption(
+        f"RL Racer — {os.path.basename(args.model_path)} on {args.track}"
+    )
     history_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
     font = pygame.font.SysFont("Arial", 22, bold=True)
     clock = pygame.time.Clock()
@@ -60,6 +70,9 @@ def main():
     last_reward = 0.0
     lap_count = 0
     best_lap_steps = None
+    lap_speed_sum = 0.0
+    lap_peak_speed = 0.0
+    lap_min_speed = float("inf")  # tracked after env.steps > 30 to skip the launch phase
 
     running = True
     while running:
@@ -71,6 +84,11 @@ def main():
         obs, reward, terminated, truncated, info = gym_env.step(action)
         episode_reward += reward
         last_reward = reward
+        speed = env.car.velocity.length()
+        lap_speed_sum += speed
+        lap_peak_speed = max(lap_peak_speed, speed)
+        if env.steps > 30:
+            lap_min_speed = min(lap_min_speed, speed)
 
         elapsed = env.steps / FPS
 
@@ -81,13 +99,22 @@ def main():
             lap_steps = env.steps
             if best_lap_steps is None or lap_steps < best_lap_steps:
                 best_lap_steps = lap_steps
+            avg_speed = lap_speed_sum / max(lap_steps, 1)
+            min_display = lap_min_speed if lap_min_speed != float("inf") else float("nan")
+            centerline = env.track.total_length
             print(f"Lap {lap_count}: {lap_steps} steps ({lap_steps / FPS:.2f}s)  "
                   f"reward={episode_reward:.1f}")
+            print(f"  speed:  avg {avg_speed:.2f}  peak {lap_peak_speed:.2f}  min {min_display:.2f}")
+            print(f"  path:   length {lap_speed_sum:.1f}  centerline {centerline:.1f}  "
+                  f"ratio {lap_speed_sum / centerline:.3f}")
 
         if terminated or truncated:
             obs, _ = gym_env.reset()
             episode_reward = 0.0
             last_reward = 0.0
+            lap_speed_sum = 0.0
+            lap_peak_speed = 0.0
+            lap_min_speed = float("inf")
 
         screen.fill(GREEN)
         env.track.draw(screen)

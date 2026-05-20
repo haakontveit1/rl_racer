@@ -1,3 +1,4 @@
+import argparse
 import pygame
 import sys
 import os
@@ -7,14 +8,24 @@ import numpy as np
 from config import *
 from environment.action import Action
 from environment.env import RacerEnv
+from environment.track import TRACKS, DEFAULT_TRACK
 
 def main():
+    parser = argparse.ArgumentParser(description="Drive the racer manually.")
+    parser.add_argument(
+        "--track",
+        default=DEFAULT_TRACK,
+        choices=list(TRACKS.keys()),
+        help=f"Track to drive on (default: {DEFAULT_TRACK}).",
+    )
+    args = parser.parse_args()
+
     # 1. Start the Pygame engines
     pygame.init()
 
     # 2. Create the window (the "Canvas")
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-    pygame.display.set_caption("RL Race Track")
+    pygame.display.set_caption(f"RL Race Track — {args.track}")
 
     history_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
 
@@ -26,7 +37,7 @@ def main():
     # 4. Build the simulation environment. A human controller will feed it
     #    Actions from the keyboard; an RL policy would feed it Actions
     #    from a forward pass on env.reset()'s observation.
-    env = RacerEnv()
+    env = RacerEnv(waypoints=TRACKS[args.track])
     obs = np.array(env.reset(), dtype=np.float32)
 
     os.makedirs("demos", exist_ok=True)
@@ -34,10 +45,11 @@ def main():
     recording_buffer = []
     demo_count = 0
 
-    start_time = pygame.time.get_ticks()
-
     episode_reward = 0.0
     last_step_reward = 0.0
+    lap_speed_sum = 0.0
+    lap_peak_speed = 0.0
+    lap_min_speed = float("inf")  # tracked after env.steps > 30 to skip the launch phase
 
     screenshot_count = 0
     running = True
@@ -70,7 +82,10 @@ def main():
         # 1. Capture the Keys (The Brain)
         keys = pygame.key.get_pressed()
 
-        elapsed_time = (pygame.time.get_ticks() - start_time) / 1000
+        # Use simulation time (steps / FPS), not wall time. The agent's metrics
+        # use the same quantity, so lap times in main.py and play_model.py are
+        # directly comparable.
+        elapsed_time = env.steps / FPS
 
         # Translate keyboard state into a generic action, then step the env.
         # An RL policy will skip the keyboard and construct Action(...) directly,
@@ -85,12 +100,24 @@ def main():
         obs = np.array(obs_tuple, dtype=np.float32)
         last_step_reward = reward
         episode_reward += reward
+        speed = env.car.velocity.length()
+        lap_speed_sum += speed
+        lap_peak_speed = max(lap_peak_speed, speed)
+        if env.steps > 30:
+            lap_min_speed = min(lap_min_speed, speed)
 
         if info["crossed_finish"]:
             # Bake the completed lap's trail into the persistent history layer
             if len(env.car.trajectory) > 1:
                 pygame.draw.lines(history_surface, (0, 255, 255, 50), False, env.car.trajectory, 1)
-            print(f"Finish Line Reached at {elapsed_time:.2f}s! Episode reward: {episode_reward:.1f}")
+            avg_speed = lap_speed_sum / max(env.steps, 1)
+            min_display = lap_min_speed if lap_min_speed != float("inf") else float("nan")
+            centerline = env.track.total_length
+            print(f"Finish Line Reached at {elapsed_time:.2f}s ({env.steps} steps)! "
+                  f"Episode reward: {episode_reward:.1f}")
+            print(f"  speed:  avg {avg_speed:.2f}  peak {lap_peak_speed:.2f}  min {min_display:.2f}")
+            print(f"  path:   length {lap_speed_sum:.1f}  centerline {centerline:.1f}  "
+                  f"ratio {lap_speed_sum / centerline:.3f}")
             if recording and recording_buffer:
                 demo_count += 1
                 obs_arr = np.stack([p[0] for p in recording_buffer])
@@ -107,9 +134,11 @@ def main():
                 print(f"Discarded {len(recording_buffer)} frames (didn't finish)")
             recording_buffer = []
             obs = np.array(env.reset(), dtype=np.float32)
-            start_time = pygame.time.get_ticks()
             episode_reward = 0.0
             last_step_reward = 0.0
+            lap_speed_sum = 0.0
+            lap_peak_speed = 0.0
+            lap_min_speed = float("inf")
 
         # B. Fill the background (Wipe the canvas clean)
         screen.fill(GREEN) # Our grass/mud
